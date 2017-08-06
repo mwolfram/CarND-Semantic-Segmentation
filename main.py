@@ -6,6 +6,24 @@ from distutils.version import LooseVersion
 import project_tests as tests
 
 
+"""
+~/tensorflow/bazel-bin/tensorflow/python/tools/freeze_graph --input_graph=base_graph.pb --input_checkpoint=ckpt --input_binary=true --output_graph=frozen_graph.pb --output_node_names=Softmax
+~/tensorflow/bazel-bin/tensorflow/python/tools/optimize_for_inference --input=frozen_graph.pb --output=optimized_graph.pb --frozen_graph=True --input_names=image_input --output_names=Softmax
+~/tensorflow/bazel-bin/tensorflow/tools/graph_transforms/transform_graph --in_graph=frozen_graph.pb --out_graph=eightbit_graph.pb --inputs=image_input --outputs=Softmax --transforms='add_default_attributes remove_nodes(op=Identity, op=CheckNumerics) fold_constants(ignore_errors=true) fold_batch_norms fold_old_batch_norms fuse_resize_and_conv quantize_weights quantize_nodes strip_unused_nodes sort_by_execution_order'
+
+1. Download `vgg16_weights.npz` and initialize encoder layer from the pre-trained weights.
+2. Next, create three fully-convolutional layers `[512, 4096]`, `[4096, 4096]`, `[4096, 2]`, initialized kernels with `tf.truncated_normal(.., stddev=0.02)`
+3. Created three upsampling layers `[kernel=4, strid=2]`, `[kernel=4, strid=2]`, `[kernel=16, strid=8]` and initialized kernel with `tf.truncated_normal(..., stddev=0.02)`
+4. Two skipped layer connections were used.
+5. The network was trained with `tf.train.AdamOptimizer(1e-4)` with `100` epochs and I can see the training loss is decreasing.
+However, when I test it against testing data set, the result was not visually appealing (attached two samples).
+
+Obviously, I can increase the number of epochs, other than that what are some tricks I can use to increase the quality of the output?
+
+Other approach: 1x1 convolutions followed by single layers of transposed convolutions initialized to perform a bilinear interpolation.
+"""
+
+
 # Check TensorFlow Version
 assert LooseVersion(tf.__version__) >= LooseVersion('1.0'), 'Please use TensorFlow version 1.0 or newer.  You are using {}'.format(tf.__version__)
 print('TensorFlow Version: {}'.format(tf.__version__))
@@ -24,16 +42,25 @@ def load_vgg(sess, vgg_path):
     :param vgg_path: Path to vgg folder, containing "variables/" and "saved_model.pb"
     :return: Tuple of Tensors from VGG model (image_input, keep_prob, layer3_out, layer4_out, layer7_out)
     """
-    # TODO: Implement function
-    #   Use tf.saved_model.loader.load to load the model and weights
+
     vgg_tag = 'vgg16'
     vgg_input_tensor_name = 'image_input:0'
     vgg_keep_prob_tensor_name = 'keep_prob:0'
     vgg_layer3_out_tensor_name = 'layer3_out:0'
     vgg_layer4_out_tensor_name = 'layer4_out:0'
     vgg_layer7_out_tensor_name = 'layer7_out:0'
-    
-    return None, None, None, None, None
+
+    # load vgg model
+    tf.saved_model.loader.load(sess, [vgg_tag], vgg_path)
+
+    # get required tensors
+    vgg_input_tensor = sess.graph.get_tensor_by_name(vgg_input_tensor_name)
+    vgg_keep_prob_tensor = sess.graph.get_tensor_by_name(vgg_keep_prob_tensor_name)
+    vgg_layer3_out_tensor = sess.graph.get_tensor_by_name(vgg_layer3_out_tensor_name)
+    vgg_layer4_out_tensor = sess.graph.get_tensor_by_name(vgg_layer4_out_tensor_name)
+    vgg_layer7_out_tensor = sess.graph.get_tensor_by_name(vgg_layer7_out_tensor_name)
+
+    return vgg_input_tensor, vgg_keep_prob_tensor, vgg_layer3_out_tensor, vgg_layer4_out_tensor, vgg_layer7_out_tensor
 tests.test_load_vgg(load_vgg, tf)
 
 
