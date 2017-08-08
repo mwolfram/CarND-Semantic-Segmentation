@@ -1,0 +1,26 @@
+language: python
+python:
+  - 3.5
+
+before_install:
+  - sudo apt-get update
+
+install:
+  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
+  - bash miniconda.sh -b -p $HOME/miniconda
+  - export PATH="$HOME/miniconda/bin:$PATH"
+  - hash -r
+  - conda config --set always_yes yes --set changeps1 no
+  - conda update -q conda
+  - conda info -a
+  - conda env create -f environment.yml
+
+before_script:
+  - source activate cv-workbench
+  
+# Run test
+script:
+  - coverage run --source . -m main.py
+   
+after_success:
+  - CODECLIMATE_REPO_TOKEN=714279ea8271e2dc847f220efab62dda52a94df48e03259044c223a6d4673a99 codeclimate-test-reporter
