@@ -1,28 +1,10 @@
 import os.path
 import tensorflow as tf
 import helper
+import glob
 import warnings
 from distutils.version import LooseVersion
 import project_tests as tests
-
-
-"""
-~/tensorflow/bazel-bin/tensorflow/python/tools/freeze_graph --input_graph=base_graph.pb --input_checkpoint=ckpt --input_binary=true --output_graph=frozen_graph.pb --output_node_names=Softmax
-~/tensorflow/bazel-bin/tensorflow/python/tools/optimize_for_inference --input=frozen_graph.pb --output=optimized_graph.pb --frozen_graph=True --input_names=image_input --output_names=Softmax
-~/tensorflow/bazel-bin/tensorflow/tools/graph_transforms/transform_graph --in_graph=frozen_graph.pb --out_graph=eightbit_graph.pb --inputs=image_input --outputs=Softmax --transforms='add_default_attributes remove_nodes(op=Identity, op=CheckNumerics) fold_constants(ignore_errors=true) fold_batch_norms fold_old_batch_norms fuse_resize_and_conv quantize_weights quantize_nodes strip_unused_nodes sort_by_execution_order'
-
-1. Download `vgg16_weights.npz` and initialize encoder layer from the pre-trained weights.
-2. Next, create three fully-convolutional layers `[512, 4096]`, `[4096, 4096]`, `[4096, 2]`, initialized kernels with `tf.truncated_normal(.., stddev=0.02)`
-3. Created three upsampling layers `[kernel=4, strid=2]`, `[kernel=4, strid=2]`, `[kernel=16, strid=8]` and initialized kernel with `tf.truncated_normal(..., stddev=0.02)`
-4. Two skipped layer connections were used.
-5. The network was trained with `tf.train.AdamOptimizer(1e-4)` with `100` epochs and I can see the training loss is decreasing.
-However, when I test it against testing data set, the result was not visually appealing (attached two samples).
-
-Obviously, I can increase the number of epochs, other than that what are some tricks I can use to increase the quality of the output?
-
-Other approach: 1x1 convolutions followed by single layers of transposed convolutions initialized to perform a bilinear interpolation.
-"""
-
 
 # Check TensorFlow Version
 assert LooseVersion(tf.__version__) >= LooseVersion('1.0'), 'Please use TensorFlow version 1.0 or newer.  You are using {}'.format(tf.__version__)
@@ -73,8 +55,78 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :param num_classes: Number of classes to classify
     :return: The Tensor for the last layer of output
     """
-    # TODO: Implement function
-    return None
+
+
+    """ 1x1 convolution
+    The correct use is tf.layers.conv2d(x, num_outputs, 1, 1, weights_initializer=custom_init).
+
+    num_outputs defines the number of output channels or kernels
+    The third argument is the kernel size, which is 1.
+    The fourth argument is the stride, we set this to 1.
+    We use the custom initializer so the weights in the dense and convolutional layers are identical.
+    This results in the a matrix multiplication operation that preserves spatial information.
+    """
+
+    """ deconvolution
+    One possible answer is using tf.layers.conv2d_transpose(x, 3, (2, 2), (2, 2)) to upsample.
+
+    The second argument 3 is the number of kernels/output channels.
+    The third argument is the kernel size, (2, 2). Note that the kernel size could also be (1, 1) and the output shape would be the same. However, if it were changed to (3, 3) note the shape would be (9, 9), at least with 'VALID' padding.
+    The fourth argument, the number of strides, is how we get from a height and width from (4, 4) to (8, 8). If this were a regular convolution the output height and width would be (2, 2).
+    Now that you've learned how to use transposed convolution, let's learn about the third technique in FCNs.
+    """
+
+    """ weight initializer
+        def custom_init(shape, dtype=tf.float32, partition_info=None, seed=0):
+            return tf.random_normal(shape, dtype=dtype, seed=seed)
+    """
+
+    print("vgg3_shape: " + str(vgg_layer3_out.get_shape()))
+    print("vgg4_shape: " + str(vgg_layer4_out.get_shape()))
+    print("vgg7_shape: " + str(vgg_layer7_out.get_shape()))
+
+    vgg_layer3_num_outputs = vgg_layer3_out.get_shape()[3]
+    vgg_layer4_num_outputs = vgg_layer4_out.get_shape()[3]
+    vgg_layer7_num_outputs = vgg_layer7_out.get_shape()[3]
+
+
+    # 1x1 convolution
+    conv_1x1_layer = tf.layers.conv2d(vgg_layer7_out,
+                                      vgg_layer7_num_outputs,
+                                      kernel_size=1,
+                                      strides=1,
+                                      name="conv_1x1_layer")
+                                      #weights_initializer=custom_init
+
+    # first deconvolution using conv2d_transpose
+    conv_transposed_layer_1 = tf.layers.conv2d_transpose(conv_1x1_layer,
+                                                         vgg_layer4_num_outputs,
+                                                         kernel_size=(2, 2), # TODO
+                                                         strides=(2, 2),     # TODO
+                                                         name="conv_transposed_layer_1")
+
+     # skip layer
+    skip_layer_1 = tf.add(conv_1x1_layer, vgg_layer4_out, name='skip_layer_1')
+
+    # second deconvolution
+    conv_transposed_layer_2 = tf.layers.conv2d_transpose(skip_1,
+                                                         vgg_layer3_num_outputs,
+                                                         kernel_size=(2, 2), # TODO
+                                                         strides=(2, 2),     # TODO
+                                                         name='conv_transposed_layer_2')
+
+    # skip layer
+    skip_layer_2 = tf.add(conv_transposed_layer_2, vgg_layer3_out, name='skip_layer_2')
+
+    # third deconvolution
+    conv_transposed_layer_3 = tf.layers.conv2d_transpose(skip_layer_2,
+                                                         num_classes,
+                                                         kernel_size=(2, 2), # TODO
+                                                         strides=(2, 2),     # TODO
+                                                         name='conv_transposed_layer_3')
+
+    return conv_transposed_layer_3
+
 tests.test_layers(layers)
 
 
