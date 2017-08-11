@@ -3,6 +3,7 @@ import tensorflow as tf
 import helper
 import glob
 import warnings
+import sys
 from distutils.version import LooseVersion
 import project_tests as tests
 
@@ -89,7 +90,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     vgg_layer7_num_outputs = vgg_layer7_out.get_shape()[3]
 
     # TODO weights are never initialized (or I don't know how)
-    # TODO no activation so far)
 
     # 1x1 convolution
     conv_1x1_layer = tf.layers.conv2d(vgg_layer7_out,
@@ -97,11 +97,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                       kernel_size=1,
                                       strides=1,
                                       name="conv_1x1_layer")
-
-    """
-    tensorflow.python.framework.errors_impl.InvalidArgumentError: Incompatible shapes: [1,6,19,512] vs. [1,10,36,512]
-	 [[Node: skip_layer_1 = Add[T=DT_FLOAT, _device="/job:localhost/replica:0/task:0/cpu:0"](conv_transposed_layer_1/BiasAdd, layer4_out)]]
-    """
 
     print("conv_1x1_layer_shape: " + str(conv_1x1_layer.get_shape()))
 
@@ -151,23 +146,39 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     Build the TensorFLow loss and optimizer operations.
     :param nn_last_layer: TF Tensor of the last layer in the neural network
     :param correct_label: TF Placeholder for the correct label image
-    :param learning_rate: TF Placeholder for the learning rate
+    :param learning_rate: TF Placeholder for the learning rate, can also be a float
     :param num_classes: Number of classes to classify
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
 
-    #logits = tf.reshape(nn_last_layer, (-1, num_classes))
-    #mean_iou, update_op = tf.metrics.mean_iou(correct_label, nn_last_layer, num_classes)
-    #train_op = tf.train.AdamOptimizer(learning_rate).minimize(mean_iou)
-
-    # TODO See http://angusg.com/writing/2016/12/28/optimizing-iou-semantic-segmentation.html
-
+    # IOU: built-in
+    """ and this does not work at all
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
-    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
+    correct_label = tf.reshape(correct_label, (-1, num_classes))
+    mean_iou, update_op = tf.metrics.mean_iou(correct_label, logits, num_classes)
+    train_op = tf.train.AdamOptimizer(learning_rate = learning_rate).minimize(tf.reduce_mean(mean_iou))
+    """
+
+    # IOU from: http://angusg.com/writing/2016/12/28/optimizing-iou-semantic-segmentation.html
+    """ this works basically, but the results don't look good at all """
+    logits = tf.reshape(nn_last_layer, (-1, num_classes))
+    correct_label = tf.reshape(correct_label, (-1, num_classes))
+    intersection = tf.reduce_sum(tf.multiply(logits, correct_label))
+    union = tf.reduce_sum(tf.subtract(tf.add(logits, correct_label), tf.multiply(logits, correct_label)))
+    #loss = tf.subtract(tf.constant(1.0, dtype=tf.float32), tf.divide(intersection, union))
+    loss = tf.divide(intersection, union)
+    tf.summary.scalar('loss', loss)
+    optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
+    train_op = optimizer.minimize(loss)
+
+    # Pixel-wise cross-entropy-loss
+    """
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
     optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
     train_op = optimizer.minimize(cross_entropy_loss)
+    """
 
-    return logits, train_op, cross_entropy_loss
+    return logits, train_op, loss
 
 tests.test_optimize(optimize)
 
@@ -184,20 +195,37 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param cross_entropy_loss: TF Tensor for the amount of loss
     :param input_image: TF Placeholder for input images
     :param correct_label: TF Placeholder for label images
-    :param keep_prob: TF Placeholder for dropout keep probability
-    :param learning_rate: TF Placeholder for learning rate
+    :param vgg_keep_prob: TF Placeholder for dropout keep probability
+    :param learning_rate: TF Placeholder for learning rate, can also be a float
     """
 
-    # TODO actually use keep prob
+    """ measure accuracy:
+    with tf.name_scope('accuracy'):
+      with tf.name_scope('correct_prediction'):
+        correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+      with tf.name_scope('accuracy'):
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    tf.summary.scalar('accuracy', accuracy)
+    """
 
     print("Start training")
+
+    merged = tf.summary.merge_all()
+    train_writer = tf.summary.FileWriter('tensorboard/train', sess.graph)
+
     sess.run(tf.global_variables_initializer())
+
     for epoch in range(epochs):
         print("Epoch", str(epoch), "|", end="")
+        sys.stdout.flush()
+        i = 0
         for sample_batch, label_batch in get_batches_fn(batch_size):
             # TODO
-            _, loss = sess.run([train_op, cross_entropy_loss], feed_dict={input_image: sample_batch, keep_prob: 1, correct_label: label_batch})
+            _, loss = sess.run([train_op, cross_entropy_loss], feed_dict={input_image: sample_batch, correct_label: label_batch, keep_prob: 0.5})
+            #train_writer.add_summary(summary, i)
             print("=", end="")
+            sys.stdout.flush()
+            i = i + 1
         print ("| Loss: ", loss)
 
 tests.test_train_nn(train_nn)
@@ -210,10 +238,10 @@ def run():
     image_shape = (160, 576)
     data_dir = './data'
     runs_dir = './runs'
-    epochs = 15 # was 15
-    batch_size = 2 # was 2
-    learning_rate = 0.001
-    keep_prob = 1 # TODO set keep_prob lower
+    epochs = 2 # was 15
+    batch_size = 10 # was 2
+    learning_rate = 0.0005
+    # TODO define keep_prob here as well
 
     # check if Kitti dataset is available
     tests.test_for_kitti_dataset(data_dir)
@@ -240,7 +268,7 @@ def run():
 
         # create TF Placeholder for labels
         # TODO other placeholders?
-        correct_label = tf.placeholder(tf.int32, (None, image_shape[0], image_shape[1], 2)) # TODO type float32
+        correct_label = tf.placeholder(tf.float32, (None, image_shape[0], image_shape[1], 2))
 
         # add layers
         nn_last_layer = layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes)
@@ -253,9 +281,7 @@ def run():
         train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, vgg_input, correct_label, vgg_keep_prob, learning_rate)
 
         # Save inference data using helper.save_inference_samples
-        print("Done training, saving inference samples...")
         helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, vgg_keep_prob, vgg_input)
-        print("Done saving inference samples.")
 
         # TODO OPTIONAL: Apply the trained model to a video
 
