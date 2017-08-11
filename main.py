@@ -200,11 +200,11 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
     print("Start training")
     for epoch in range(epochs):
-        print("Epoch", str(epoch),)
+        print("Epoch", str(epoch), "|", end="")
         for images, labels in get_batches_fn(batch_size):
             sess.run(train_op, feed_dict={input_image: images, correct_label: labels, keep_prob: dropout, learning_rate: rate})
             loss = sess.run(cross_entropy_loss, feed_dict={input_image: images, correct_label: labels, keep_prob: 1.0})
-            print("=",)
+            print("=", end="")
         print()
 
 tests.test_train_nn(train_nn)
@@ -251,8 +251,8 @@ def run():
     data_dir = './data'
     runs_dir = './runs'
 
-    epochs = 1
-    batch_size = 20
+    epochs = 2
+    batch_size = 5
 
     tests.test_for_kitti_dataset(data_dir)
 
@@ -289,6 +289,7 @@ def run():
         logits, train_op, cross_entropy_loss = optimize(conv_transposed_layer_3, correct_label, learning_rate, num_classes)
 
         #  Train NN using the train_nn function
+        sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
         train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, image_input, correct_label, keep_prob, learning_rate)
 
         # Save inference data using helper.save_inference_samples
