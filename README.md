@@ -1,4 +1,5 @@
 [![Travis CI Build Status][travis-badge]][travis-site]
+
 [travis-badge]: https://travis-ci.org/mwolfram/CarND-Semantic-Segmentation.svg?branch=master
 [travis-site]: https://travis-ci.org/mwolfram/CarND-Semantic-Segmentation
 
