@@ -20,7 +20,4 @@ before_script:
   
 # Run test
 script:
-  - coverage run --source . -m main.py
-   
-after_success:
-  - CODECLIMATE_REPO_TOKEN=714279ea8271e2dc847f220efab62dda52a94df48e03259044c223a6d4673a99 codeclimate-test-reporter
+  - python main.py
