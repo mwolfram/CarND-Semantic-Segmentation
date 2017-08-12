@@ -17,7 +17,8 @@ install:
 
 before_script:
   - source activate cv-workbench
-  
+  - export TESTS_ONLY=True
+
 # Run test
 script:
   - python main.py
