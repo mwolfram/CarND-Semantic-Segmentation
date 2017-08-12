@@ -4,6 +4,7 @@ import helper
 import glob
 import warnings
 import sys
+import os
 from distutils.version import LooseVersion
 import project_tests as tests
 
@@ -232,6 +233,11 @@ tests.test_train_nn(train_nn)
 
 
 def run():
+
+    tests_only = os.getenv("TESTS_ONLY", False)
+    if tests_only:
+        print("TESTS_ONLY environment variable set to True, skipping run.")
+        return
 
     # configuration
     num_classes = 2
