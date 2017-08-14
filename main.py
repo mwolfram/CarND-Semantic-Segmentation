@@ -152,40 +152,17 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
 
-    # IOU: built-in
-    """ and this does not work at all
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
-    correct_label = tf.reshape(correct_label, (-1, num_classes))
-    mean_iou, update_op = tf.metrics.mean_iou(correct_label, logits, num_classes)
-    train_op = tf.train.AdamOptimizer(learning_rate = learning_rate).minimize(tf.reduce_mean(mean_iou))
-    """
-
-    # IOU from: http://angusg.com/writing/2016/12/28/optimizing-iou-semantic-segmentation.html
-    """ this works basically, but the results don't look good at all """
-    logits = tf.reshape(nn_last_layer, (-1, num_classes))
-    correct_label = tf.reshape(correct_label, (-1, num_classes))
-    intersection = tf.reduce_sum(tf.multiply(logits, correct_label))
-    union = tf.reduce_sum(tf.subtract(tf.add(logits, correct_label), tf.multiply(logits, correct_label)))
-    #loss = tf.subtract(tf.constant(1.0, dtype=tf.float32), tf.divide(intersection, union))
-    loss = tf.divide(intersection, union)
-    tf.summary.scalar('loss', loss)
-    optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
-    train_op = optimizer.minimize(loss)
-
-    # Pixel-wise cross-entropy-loss
-    """
-    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
-    optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
+    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
+    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     train_op = optimizer.minimize(cross_entropy_loss)
-    """
 
-    return logits, train_op, loss
+    return logits, train_op, cross_entropy_loss
 
 tests.test_optimize(optimize)
 
-
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
-             correct_label, keep_prob, learning_rate):
+             correct_label, keep_prob, learning_rate, logits):
     """
     Train neural network and print out the loss during training.
     :param sess: TF Session
@@ -198,6 +175,7 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param correct_label: TF Placeholder for label images
     :param vgg_keep_prob: TF Placeholder for dropout keep probability
     :param learning_rate: TF Placeholder for learning rate, can also be a float
+    :param logits: For inferencing during training
     """
 
     """ measure accuracy:
@@ -211,22 +189,29 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
     print("Start training")
 
+    """
+    tf.summary.scalar('mean', 1.5)
     merged = tf.summary.merge_all()
     train_writer = tf.summary.FileWriter('tensorboard/train', sess.graph)
+    summary = sess.run([merged])
+    print(summary)
+    train_writer.add_summary(summary)
+    """
 
     sess.run(tf.global_variables_initializer())
 
     for epoch in range(epochs):
         print("Epoch", str(epoch), "|", end="")
         sys.stdout.flush()
-        i = 0
         for sample_batch, label_batch in get_batches_fn(batch_size):
-            # TODO
-            _, loss = sess.run([train_op, cross_entropy_loss], feed_dict={input_image: sample_batch, correct_label: label_batch, keep_prob: 0.5})
+
+            _, loss = sess.run([train_op, cross_entropy_loss], feed_dict={input_image: sample_batch, correct_label: label_batch, keep_prob: 0.8})
+
+            #helper.calculate_iou(sess, logits, keep_prob, input_image, sample_batch, label_batch, (160, 576))
+
             #train_writer.add_summary(summary, i)
             print("=", end="")
             sys.stdout.flush()
-            i = i + 1
         print ("| Loss: ", loss)
 
 tests.test_train_nn(train_nn)
@@ -244,8 +229,8 @@ def run():
     image_shape = (160, 576)
     data_dir = './data'
     runs_dir = './runs'
-    epochs = 2 # was 15
-    batch_size = 10 # was 2
+    epochs = 50 # 2 was 15
+    batch_size = 5 # 10 was 2
     learning_rate = 0.0005
     # TODO define keep_prob here as well
 
@@ -268,13 +253,21 @@ def run():
 
         # TODO OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
+        #flipped_images = tf.image.random_flip_left_right(images)
+        """
+        rotation: random with angle between 0° and 360° (uniform)
+        translation: random with shift between -10 and 10 pixels (uniform)
+        rescaling: random with scale factor between 1/1.6 and 1.6 (log-uniform)
+        flipping: yes or no (bernoulli)
+        shearing: random with angle between -20° and 20° (uniform)
+        stretching: random with stretch factor between 1/1.3 and 1.3 (log-uniform)
+        """
 
         # load VGG
         vgg_input, vgg_keep_prob, vgg_layer3_out, vgg_layer4_out, vgg_layer7_out = load_vgg(sess, vgg_path)
 
         # create TF Placeholder for labels
-        # TODO other placeholders?
-        correct_label = tf.placeholder(tf.float32, (None, image_shape[0], image_shape[1], 2))
+        correct_label = tf.placeholder(tf.float32, (None, image_shape[0], image_shape[1], num_classes))
 
         # add layers
         nn_last_layer = layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes)
@@ -284,7 +277,7 @@ def run():
 
         # Train NN using the train_nn function
         # TODO passing learning rate directly
-        train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, vgg_input, correct_label, vgg_keep_prob, learning_rate)
+        train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, vgg_input, correct_label, vgg_keep_prob, learning_rate, logits)
 
         # Save inference data using helper.save_inference_samples
         helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, vgg_keep_prob, vgg_input)

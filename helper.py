@@ -124,6 +124,70 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
 
         yield os.path.basename(image_file), np.array(street_im)
 
+def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, image_shape):
+    """
+    Calculate IoU for a batch of images and labels
+    :param sess: TF session
+    :param logits: TF Tensor for the logits
+    :param keep_prob: TF Placeholder for the dropout keep robability
+    :param image_pl: TF Placeholder for the image placeholder
+    :param image_batch: Batch of images
+    :param label_batch: Batch of labels
+    :param image_shape: Tuple - Shape of image
+    :return: Output for for each test image
+    """
+
+    if logits is None:
+        return 0.0
+
+    sum_iou = 0.0
+
+    for image, label in zip(image_batch, label_batch):
+
+        # inference
+        im_softmax = sess.run(
+            [tf.nn.softmax(logits)],
+            {keep_prob: 1.0, image_pl: [image]})
+
+        # create segmentation image
+        im_softmax = im_softmax[0][:, 1].reshape(image_shape[0], image_shape[1])
+        segmentation = (im_softmax > 0.5).reshape(image_shape[0], image_shape[1], 1)
+
+        label_formatted = np.zeros_like(segmentation)
+
+        for x in range(image_shape[0]):
+            for y in range(image_shape[1]):
+                if(label[x][y][0] is True):
+                    label_formatted[x][y] = True
+                else:
+                    label_formatted[x][y] = False
+
+        """
+        tf_label_formatted = tf.constant([
+            [0, 0, 0, 0],
+            [1, 1, 1, 1],
+            [2, 2, 2, 2],
+            [3, 3, 3, 3]], dtype=tf.float32)
+        tf_segmentation = tf.constant([
+            [0, 0, 0, 0],
+            [1, 0, 0, 1],
+            [1, 2, 2, 1],
+            [3, 3, 0, 3]], dtype=tf.float32)
+        """
+
+        tf_label_formatted = tf.constant(label_formatted, dtype=tf.float32)
+        tf_segmentation = tf.constant(segmentation, dtype=tf.float32)
+
+        iou, iou_op = tf.metrics.mean_iou(tf_label_formatted, tf_segmentation, 2)
+
+        sess.run(tf.local_variables_initializer())
+        sess.run(iou_op)
+
+        sum_iou = sum_iou + sess.run(iou)
+
+    mean_iou = sum_iou / len(image_batch)
+    # check iou # TODO mean over all images
+    print("Mean IoU: " + str(mean_iou))
 
 def save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image):
     # Make folder for current run

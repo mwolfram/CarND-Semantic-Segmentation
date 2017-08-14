@@ -120,6 +120,7 @@ def test_train_nn(train_nn):
         return np.arange(np.prod(shape)).reshape(shape)
 
     train_op = tf.constant(0)
+    logits = tf.constant(0)
     cross_entropy_loss = tf.constant(10.11)
     input_image = tf.placeholder(tf.float32, name='input_image')
     correct_label = tf.placeholder(tf.float32, name='correct_label')
@@ -136,7 +137,8 @@ def test_train_nn(train_nn):
             'input_image': input_image,
             'correct_label': correct_label,
             'keep_prob': keep_prob,
-            'learning_rate': learning_rate}
+            'learning_rate': learning_rate,
+            'logits' : None}
         _prevent_print(train_nn, parameters)
 
 
