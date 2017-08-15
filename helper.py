@@ -137,15 +137,23 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
     :return: Output for for each test image
     """
 
+    # For testing
     if logits is None:
         return 0.0
 
     sum_iou = 0.0
 
+    softmax_logits = tf.nn.softmax(logits)
+    #softmax_part = softmax_logits[0][:, 1] # really? i don't need this?
+    softmax_reshaped = tf.reshape(tf.gather(softmax_logits, 0), (image_shape[0], image_shape[1]), name="reshape_softmax")
+    gt05 = tf.greater(softmax_reshaped, 0.5)
+    tf_segmentation_ = tf.reshape(gt05, (image_shape[0], image_shape[1]), name="reshape_gt05_to_seg")
+    label_pl = tf.placeholder(tf.float32, (image_shape[0], image_shape[1]), name="label_pl")
+    iou_, iou_op_ = tf.metrics.mean_iou(label_pl, tf_segmentation_, 2)
+
+    # TODO can we get rid of the loop?
     for image, label in zip(image_batch, label_batch):
 
-        softmax_logits = tf.nn.softmax(logits)
-        
         # inference
         im_softmax = sess.run(
             [softmax_logits],
@@ -153,74 +161,21 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
 
         # create segmentation image
         im_softmax = im_softmax[0][:, 1].reshape(image_shape[0], image_shape[1])
-        segmentation = (im_softmax > 0.5).reshape(image_shape[0], image_shape[1], 1)
+        segmentation = (im_softmax > 0.5)#.reshape(image_shape[0], image_shape[1], 1)
 
-        label_formatted = np.zeros_like(segmentation)
-
-        #print(label.dtype)
-        #print(label.shape)
-
-        #print()
-        #print("=========================================LABEL===================================================================")
-
-        for x in range(image_shape[0]):
-            for y in range(image_shape[1]):
-                if(label[x][y][1] == True):
-                    label_formatted[x][y] = True
-                else:
-                    label_formatted[x][y] = False
-                if (y % 6 == 0 and x % 3 == 0):
-                    toprint = "."
-                    if (label_formatted[x][y] == True):
-                        toprint = "#"
-        #            print(toprint, end="")
-        #    if (x % 3 == 0):
-        #        print()
-
-        #print("========================================SEGME====================================================================")
-
-        for x in range(image_shape[0]):
-            for y in range(image_shape[1]):
-                if (y % 6 == 0 and x % 3 == 0):
-                    toprint = "."
-                    if (segmentation[x][y] == True):
-                        toprint = "#"
-        #            print(toprint, end="")
-        #    if (x % 3 == 0):
-        #        print()
-
-        #print("=======================================END======================================================================")
-        #print()
-        #print()
-        #print(label_formatted)
-        #print("=================================================================================================================")
-        #print(segmentation)
-
-        """
-        tf_label_formatted = tf.constant([
-            [0, 0, 0, 0],
-            [1, 1, 1, 1],
-            [2, 2, 2, 2],
-            [3, 3, 3, 3]], dtype=tf.float32)
-        tf_segmentation = tf.constant([
-            [0, 0, 0, 0],
-            [1, 0, 0, 1],
-            [1, 2, 2, 1],
-            [3, 3, 0, 3]], dtype=tf.float32)
-        """
-
-        tf_label_formatted = tf.constant(label_formatted, dtype=tf.float32)
-        tf_segmentation = tf.constant(segmentation, dtype=tf.float32)
+        tf_label_formatted = tf.constant(label[:,:,1], dtype=tf.float32)
+        tf_segmentation = tf.constant(segmentation[:,:], dtype=tf.float32)
 
         iou, iou_op = tf.metrics.mean_iou(tf_label_formatted, tf_segmentation, 2)
 
-        sess.run(tf.local_variables_initializer())
-        sess.run(iou_op)
+        label_formatted = label[:,:,1]
 
-        sum_iou = sum_iou + sess.run(iou)
+        sess.run(tf.local_variables_initializer())
+        sess.run(iou_op_, {keep_prob: 1.0, image_pl: [image], label_pl: label_formatted})
+
+        sum_iou = sum_iou + sess.run(iou_, {keep_prob: 1.0, image_pl: [image], label_pl: label_formatted})
 
     mean_iou = sum_iou / len(image_batch)
-    # check iou # TODO mean over all images
     print("Mean IoU: " + str(mean_iou))
 
 def save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image):
