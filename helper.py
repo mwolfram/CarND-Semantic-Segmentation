@@ -155,12 +155,41 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
 
         label_formatted = np.zeros_like(segmentation)
 
+        print()
+        print("=========================================LABEL===================================================================")
+
         for x in range(image_shape[0]):
             for y in range(image_shape[1]):
-                if(label[x][y][0] is True):
-                    label_formatted[x][y] = True
-                else:
+                if(label[x][y][1] is True):
                     label_formatted[x][y] = False
+                else:
+                    label_formatted[x][y] = True
+                if (y % 6 == 0 and x % 3 == 0):
+                    toprint = "."
+                    if (label_formatted[x][y] == True):
+                        toprint = "#"
+                    print(toprint, end="")
+            if (x % 3 == 0):
+                print()
+
+        print("========================================SEGME====================================================================")
+
+        for x in range(image_shape[0]):
+            for y in range(image_shape[1]):
+                if (y % 6 == 0 and x % 3 == 0):
+                    toprint = "."
+                    if (segmentation[x][y] == True):
+                        toprint = "#"
+                    print(toprint, end="")
+            if (x % 3 == 0):
+                print()
+
+        print("=======================================END======================================================================")
+        print()
+        print()
+        #print(label_formatted)
+        #print("=================================================================================================================")
+        #print(segmentation)
 
         """
         tf_label_formatted = tf.constant([
