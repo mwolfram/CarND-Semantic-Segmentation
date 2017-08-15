@@ -155,12 +155,15 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
 
         label_formatted = np.zeros_like(segmentation)
 
+        print(label.dtype)
+        print(label.shape)
+
         print()
         print("=========================================LABEL===================================================================")
 
         for x in range(image_shape[0]):
             for y in range(image_shape[1]):
-                if(label[x][y][1] is True):
+                if(label[x][y][1] == True):
                     label_formatted[x][y] = False
                 else:
                     label_formatted[x][y] = True
