@@ -144,9 +144,11 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
 
     for image, label in zip(image_batch, label_batch):
 
+        softmax_logits = tf.nn.softmax(logits)
+        
         # inference
         im_softmax = sess.run(
-            [tf.nn.softmax(logits)],
+            [softmax_logits],
             {keep_prob: 1.0, image_pl: [image]})
 
         # create segmentation image
@@ -155,27 +157,27 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
 
         label_formatted = np.zeros_like(segmentation)
 
-        print(label.dtype)
-        print(label.shape)
+        #print(label.dtype)
+        #print(label.shape)
 
-        print()
-        print("=========================================LABEL===================================================================")
+        #print()
+        #print("=========================================LABEL===================================================================")
 
         for x in range(image_shape[0]):
             for y in range(image_shape[1]):
                 if(label[x][y][1] == True):
-                    label_formatted[x][y] = False
-                else:
                     label_formatted[x][y] = True
+                else:
+                    label_formatted[x][y] = False
                 if (y % 6 == 0 and x % 3 == 0):
                     toprint = "."
                     if (label_formatted[x][y] == True):
                         toprint = "#"
-                    print(toprint, end="")
-            if (x % 3 == 0):
-                print()
+        #            print(toprint, end="")
+        #    if (x % 3 == 0):
+        #        print()
 
-        print("========================================SEGME====================================================================")
+        #print("========================================SEGME====================================================================")
 
         for x in range(image_shape[0]):
             for y in range(image_shape[1]):
@@ -183,13 +185,13 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
                     toprint = "."
                     if (segmentation[x][y] == True):
                         toprint = "#"
-                    print(toprint, end="")
-            if (x % 3 == 0):
-                print()
+        #            print(toprint, end="")
+        #    if (x % 3 == 0):
+        #        print()
 
-        print("=======================================END======================================================================")
-        print()
-        print()
+        #print("=======================================END======================================================================")
+        #print()
+        #print()
         #print(label_formatted)
         #print("=================================================================================================================")
         #print(segmentation)
