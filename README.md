@@ -5,8 +5,6 @@
 
 # Semantic Segmentation
 
-add test change TODO remove
-
 ### Introduction
 In this project, you'll label the pixels of a road in images using a Fully Convolutional Network (FCN).
 
