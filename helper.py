@@ -124,6 +124,7 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
 
         yield os.path.basename(image_file), np.array(street_im)
 
+# TODO deprecated, this happens in main
 def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, image_shape):
     """
     Calculate IoU for a batch of images and labels
@@ -135,22 +136,6 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
     :param label_batch: Batch of labels
     :param image_shape: Tuple - Shape of image
     :return: Output for for each test image
-    """
-
-    """ From @jendrik (Slack) """
-    """
-    crossEntropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.labels, logits=logits)
-    self.crossEntropy = tf.reduce_mean(crossEntropy)
-    loss = tf.reduce_mean(tf.multiply(crossEntropy, self.weights))
-    tf.add_to_collection(‘my_losses’, tf.multiply(.1,loss))
-
-    imu, self.imuOp = tf.metrics.mean_iou(self.labels, tf.argmax(logits, axis = 2), numberOfClasses,
-    self.weights, name = ‘meanIMU’)
-    with tf.control_dependencies([self.imuOp]):
-           self.imu = tf.subtract(tf.constant(1.), imu)
-           tf.add_to_collection(‘my_losses’, self.imu)
-    self.loss = tf.reduce_sum(tf.stack(tf.get_collection(‘my_losses’)))
-    self.trainStep = tf.train.AdamOptimizer(5e4).minimize(self.loss)
     """
 
     # For testing
