@@ -137,15 +137,31 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
     :return: Output for for each test image
     """
 
+    """ From @jendrik (Slack) """
+    """
+    crossEntropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.labels, logits=logits)
+    self.crossEntropy = tf.reduce_mean(crossEntropy)
+    loss = tf.reduce_mean(tf.multiply(crossEntropy, self.weights))
+    tf.add_to_collection(‘my_losses’, tf.multiply(.1,loss))
+
+    imu, self.imuOp = tf.metrics.mean_iou(self.labels, tf.argmax(logits, axis = 2), numberOfClasses,
+    self.weights, name = ‘meanIMU’)
+    with tf.control_dependencies([self.imuOp]):
+           self.imu = tf.subtract(tf.constant(1.), imu)
+           tf.add_to_collection(‘my_losses’, self.imu)
+    self.loss = tf.reduce_sum(tf.stack(tf.get_collection(‘my_losses’)))
+    self.trainStep = tf.train.AdamOptimizer(5e4).minimize(self.loss)
+    """
+
     # For testing
     if logits is None:
         return 0.0
 
     sum_iou = 0.0
 
-    softmax_logits = tf.nn.softmax(logits)
-    #softmax_part = softmax_logits[0][:, 1] # really? i don't need this?
-    softmax_reshaped = tf.reshape(tf.gather(softmax_logits, 0), (image_shape[0], image_shape[1]), name="reshape_softmax")
+    softmax_logits = tf.reshape(tf.squeeze(tf.nn.softmax(logits)), [-1])
+    softmax_part = tf.gather(softmax_logits, tf.constant(np.asarray(range(1, image_shape[0]*image_shape[1]*2, 2))), name="gather_sm_part")
+    softmax_reshaped = tf.reshape(softmax_part, (image_shape[0], image_shape[1]), name="reshape_softmax")
     gt05 = tf.greater(softmax_reshaped, 0.5)
     tf_segmentation_ = tf.reshape(gt05, (image_shape[0], image_shape[1]), name="reshape_gt05_to_seg")
     label_pl = tf.placeholder(tf.float32, (image_shape[0], image_shape[1]), name="label_pl")
@@ -153,30 +169,13 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
 
     # TODO can we get rid of the loop?
     for image, label in zip(image_batch, label_batch):
-
-        # inference
-        im_softmax = sess.run(
-            [softmax_logits],
-            {keep_prob: 1.0, image_pl: [image]})
-
-        # create segmentation image
-        im_softmax = im_softmax[0][:, 1].reshape(image_shape[0], image_shape[1])
-        segmentation = (im_softmax > 0.5)#.reshape(image_shape[0], image_shape[1], 1)
-
-        tf_label_formatted = tf.constant(label[:,:,1], dtype=tf.float32)
-        tf_segmentation = tf.constant(segmentation[:,:], dtype=tf.float32)
-
-        iou, iou_op = tf.metrics.mean_iou(tf_label_formatted, tf_segmentation, 2)
-
         label_formatted = label[:,:,1]
-
         sess.run(tf.local_variables_initializer())
         sess.run(iou_op_, {keep_prob: 1.0, image_pl: [image], label_pl: label_formatted})
-
         sum_iou = sum_iou + sess.run(iou_, {keep_prob: 1.0, image_pl: [image], label_pl: label_formatted})
 
     mean_iou = sum_iou / len(image_batch)
-    print("Mean IoU: " + str(mean_iou))
+    return mean_iou
 
 def save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image):
     # Make folder for current run
