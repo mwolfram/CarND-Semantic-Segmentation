@@ -12,6 +12,11 @@ cd data
 wget http://kitti.is.tue.mpg.de/kitti/data_road.zip
 unzip data_road.zip
 
+mkdir test_videos
+cd test_videos
+wget https://www.dropbox.com/s/9iiy7u4nv5l77ww/hart1.mp4?dl=1
+
+cd ..
 cd ..
 
 # run project

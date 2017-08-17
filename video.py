@@ -24,7 +24,7 @@ class Video():
         self.targetPath = targetPath
 
     def process_image_video(self, image):
-        image = scipy.misc.imresize(scipy.misc.imread(image), self.image_shape)
+        image = scipy.misc.imresize(image, self.image_shape)
 
         im_softmax = self.sess.run(
             [tf.nn.softmax(self.logits)],
@@ -34,7 +34,8 @@ class Video():
         mask = np.dot(segmentation, np.array([[0, 255, 0, 127]]))
         mask = scipy.misc.toimage(mask, mode="RGBA")
         street_im = scipy.misc.toimage(image)
-        return np.array(street_im.paste(mask, box=None, mask=mask))
+        street_im.paste(mask, box=None, mask=mask)
+        return np.array(street_im)
 
     def process_video(self):
         seg_clip = self.videoClip.fl_image(self.process_image_video)
