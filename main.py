@@ -203,16 +203,20 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     for epoch in range(epochs):
         print("Epoch", str(epoch), "|", end="")
         sys.stdout.flush()
+        batch_count = 0
+        sum_iou = 0.0
         for sample_batch, label_batch in get_batches_fn(batch_size):
+            batch_count = batch_count + 1
 
             _, loss = sess.run([train_op, cross_entropy_loss], feed_dict={input_image: sample_batch, correct_label: label_batch, keep_prob: 0.8})
 
-            #helper.calculate_iou(sess, logits, keep_prob, input_image, sample_batch, label_batch, (160, 576))
+            sum_iou += helper.calculate_iou(sess, logits, keep_prob, input_image, sample_batch, label_batch, (160, 576))
 
             #train_writer.add_summary(summary, i)
             print("=", end="")
             sys.stdout.flush()
-        print ("| Loss: ", loss)
+        mean_iou = sum_iou / batch_count
+        print ("| Loss:", loss, "| IoU:", mean_iou)
 
 tests.test_train_nn(train_nn)
 

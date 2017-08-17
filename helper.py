@@ -158,24 +158,23 @@ def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, i
         return 0.0
 
     sum_iou = 0.0
+    batch_size = len(label_batch)
 
+    # Prepare Ops
     softmax_logits = tf.reshape(tf.squeeze(tf.nn.softmax(logits)), [-1])
-    softmax_part = tf.gather(softmax_logits, tf.constant(np.asarray(range(1, image_shape[0]*image_shape[1]*2, 2))), name="gather_sm_part")
-    softmax_reshaped = tf.reshape(softmax_part, (image_shape[0], image_shape[1]), name="reshape_softmax")
+    indices_to_gather = tf.constant(np.asarray(range(1, batch_size*image_shape[0]*image_shape[1]*2, 2)))
+    softmax_part = tf.gather(softmax_logits, indices_to_gather, name="gather_sm_part")
+    softmax_reshaped = tf.reshape(softmax_part, (batch_size, image_shape[0], image_shape[1]), name="reshape_softmax")
     gt05 = tf.greater(softmax_reshaped, 0.5)
-    tf_segmentation_ = tf.reshape(gt05, (image_shape[0], image_shape[1]), name="reshape_gt05_to_seg")
-    label_pl = tf.placeholder(tf.float32, (image_shape[0], image_shape[1]), name="label_pl")
+    tf_segmentation_ = tf.reshape(gt05, (batch_size, image_shape[0], image_shape[1]), name="reshape_gt05_to_seg")
+    label_pl = tf.placeholder(tf.float32, (batch_size, image_shape[0], image_shape[1]), name="label_pl")
     iou_, iou_op_ = tf.metrics.mean_iou(label_pl, tf_segmentation_, 2)
 
-    # TODO can we get rid of the loop?
-    for image, label in zip(image_batch, label_batch):
-        label_formatted = label[:,:,1]
-        sess.run(tf.local_variables_initializer())
-        sess.run(iou_op_, {keep_prob: 1.0, image_pl: [image], label_pl: label_formatted})
-        sum_iou = sum_iou + sess.run(iou_, {keep_prob: 1.0, image_pl: [image], label_pl: label_formatted})
-
-    mean_iou = sum_iou / len(image_batch)
-    return mean_iou
+    # Run
+    label_batch_formatted = label_batch[:,:,:,1]
+    sess.run(tf.local_variables_initializer())
+    sess.run(iou_op_, {keep_prob: 1.0, image_pl: image_batch, label_pl: label_batch_formatted})
+    return sess.run(iou_, {keep_prob: 1.0, image_pl: image_batch, label_pl: label_batch_formatted})
 
 def save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image):
     # Make folder for current run
