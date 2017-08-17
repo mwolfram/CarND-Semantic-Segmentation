@@ -109,7 +109,7 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
     :param image_shape: Tuple - Shape of image
     :return: Output for for each test image
     """
-    for image_file in glob(os.path.join(data_folder, 'image_2', '*.png')):
+    for image_file in glob(os.path.join(data_folder, 'image_2', '*.jpg')):
         image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape)
 
         im_softmax = sess.run(
@@ -124,43 +124,6 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
 
         yield os.path.basename(image_file), np.array(street_im)
 
-# TODO deprecated, this happens in main
-def calculate_iou(sess, logits, keep_prob, image_pl, image_batch, label_batch, image_shape):
-    """
-    Calculate IoU for a batch of images and labels
-    :param sess: TF session
-    :param logits: TF Tensor for the logits
-    :param keep_prob: TF Placeholder for the dropout keep robability
-    :param image_pl: TF Placeholder for the image placeholder
-    :param image_batch: Batch of images
-    :param label_batch: Batch of labels
-    :param image_shape: Tuple - Shape of image
-    :return: Output for for each test image
-    """
-
-    # For testing
-    if logits is None:
-        return 0.0
-
-    sum_iou = 0.0
-    batch_size = len(label_batch)
-
-    # Prepare Ops
-    softmax_logits = tf.reshape(tf.squeeze(tf.nn.softmax(logits)), [-1])
-    indices_to_gather = tf.constant(np.asarray(range(1, batch_size*image_shape[0]*image_shape[1]*2, 2)))
-    softmax_part = tf.gather(softmax_logits, indices_to_gather, name="gather_sm_part")
-    softmax_reshaped = tf.reshape(softmax_part, (batch_size, image_shape[0], image_shape[1]), name="reshape_softmax")
-    gt05 = tf.greater(softmax_reshaped, 0.5)
-    tf_segmentation_ = tf.reshape(gt05, (batch_size, image_shape[0], image_shape[1]), name="reshape_gt05_to_seg")
-    label_pl = tf.placeholder(tf.float32, (batch_size, image_shape[0], image_shape[1]), name="label_pl")
-    iou_, iou_op_ = tf.metrics.mean_iou(label_pl, tf_segmentation_, 2)
-
-    # Run
-    label_batch_formatted = label_batch[:,:,:,1]
-    sess.run(tf.local_variables_initializer())
-    sess.run(iou_op_, {keep_prob: 1.0, image_pl: image_batch, label_pl: label_batch_formatted})
-    return sess.run(iou_, {keep_prob: 1.0, image_pl: image_batch, label_pl: label_batch_formatted})
-
 def save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image):
     # Make folder for current run
     output_dir = os.path.join(runs_dir, str(time.time()))
@@ -171,6 +134,7 @@ def save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_p
     # Run NN on test images and save them to HD
     print('Training Finished. Saving test images to: {}'.format(output_dir))
     image_outputs = gen_test_output(
-        sess, logits, keep_prob, input_image, os.path.join(data_dir, 'data_road/testing'), image_shape)
+        #sess, logits, keep_prob, input_image, os.path.join(data_dir, 'data_road/testing'), image_shape)
+        sess, logits, keep_prob, input_image, os.path.join(data_dir, 'test_images'), image_shape)
     for name, image in image_outputs:
         scipy.misc.imsave(os.path.join(output_dir, name), image)

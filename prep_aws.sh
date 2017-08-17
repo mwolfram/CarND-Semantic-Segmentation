@@ -1,5 +1,7 @@
 # get dependencies
 pip install tqdm
+pip install moviepy
+sudo apt-get install ffmpeg
 
 # get project
 git clone https://github.com/mwolfram/CarND-Semantic-Segmentation.git

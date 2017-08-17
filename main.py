@@ -6,6 +6,7 @@ import glob
 import warnings
 import sys
 import os
+from video import Video
 from distutils.version import LooseVersion
 import project_tests as tests
 
@@ -142,23 +143,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 
 tests.test_layers(layers)
 
-# TODO remove if it aint working
-""" From @jendrik (Slack) """
-def optimize2(nn_last_layer, correct_label, learning_rate, num_classes):
-    logits = tf.reshape(nn_last_layer, (-1, num_classes))
-    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
-    tf.add_to_collection('my_losses', tf.multiply(.1, cross_entropy_loss))
-
-    imu, imuOp = tf.metrics.mean_iou(correct_label, tf.argmax(logits, axis = 2), num_classes, name = 'meanIMU')
-    with tf.control_dependencies([imuOp]):
-           imu = tf.subtract(tf.constant(1.), imu)
-           tf.add_to_collection('my_losses', imu)
-    loss = tf.reduce_sum(tf.stack(tf.get_collection('my_losses')))
-    trainStep = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
-    return logits, trainStep, loss
-
-# TODO missing test
-
 def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     """
     Build the TensorFLow loss and optimizer operations.
@@ -179,18 +163,12 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
 tests.test_optimize(optimize)
 
 def get_iou(logits, image_shape, batch_size):
-    # For testing
-    if logits is None:
-        return None, None
-
-    # Prepare Ops
     unstacked_softmax_logits = tf.unstack(tf.nn.softmax(logits), num=2, axis=1, name='unstack_logits')
     softmax_part = unstacked_softmax_logits[1]
     tf_segmentation = tf.greater(softmax_part, 0.5)
     label_pl = tf.placeholder(tf.float32, [None], name="label_pl")
     iou, iou_op = tf.metrics.mean_iou(label_pl, tf_segmentation, 2)
     return iou, iou_op, label_pl
-
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
              correct_label, keep_prob, learning_rate, logits):
@@ -209,15 +187,6 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param logits: For inferencing during training
     """
 
-    """ measure accuracy:
-    with tf.name_scope('accuracy'):
-      with tf.name_scope('correct_prediction'):
-        correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
-      with tf.name_scope('accuracy'):
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-    tf.summary.scalar('accuracy', accuracy)
-    """
-
     print("Start training")
 
     """
@@ -229,7 +198,9 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     train_writer.add_summary(summary)
     """
 
-    iou, iou_op, label_pl = get_iou(logits, (160, 576), batch_size)
+    # Create IoU ops
+    if logits is not None:
+        iou, iou_op, label_pl = get_iou(logits, (160, 576), batch_size)
 
     sess.run(tf.global_variables_initializer())
 
@@ -245,10 +216,12 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
             _, loss = sess.run([train_op, cross_entropy_loss], feed_dict={input_image: sample_batch, correct_label: label_batch, keep_prob: 0.8})
 
             # IoU
-            label_batch_formatted = label_batch[:,:,:,1].flatten()
-            sess.run(tf.local_variables_initializer())
-            _, iou_val = sess.run([iou_op, iou], {keep_prob: 1.0, input_image: sample_batch, label_pl: label_batch_formatted})
-            sum_iou += iou_val
+            if logits is not None:
+                label_batch_formatted = label_batch[:,:,:,1].flatten()
+                sess.run(tf.local_variables_initializer())
+                sess.run(iou_op, {keep_prob: 1.0, input_image: sample_batch, label_pl: label_batch_formatted})
+                cur_iou = sess.run(iou, {keep_prob: 1.0, input_image: sample_batch, label_pl: label_batch_formatted})
+                sum_iou += cur_iou
 
             #train_writer.add_summary(summary, i)
             print("=", end="")
@@ -256,8 +229,11 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
         mean_iou = sum_iou / batch_count
         print ("| Loss:", loss, "| IoU:", mean_iou)
 
-# TODO tests.test_train_nn(train_nn)
+    if logits is not None:
+        saver = tf.train.Saver()
+        saver.save(sess, "model")
 
+tests.test_train_nn(train_nn)
 
 def run():
 
@@ -271,8 +247,8 @@ def run():
     image_shape = (160, 576)
     data_dir = './data'
     runs_dir = './runs'
-    epochs = 50 # 2 was 15
-    batch_size = 5 # 10 was 2
+    epochs = 2 # 2 was 15, nice results with 50, 5
+    batch_size = 10 # 10 was 2
     learning_rate = 0.0005
     # TODO define keep_prob here as well
 
@@ -317,9 +293,21 @@ def run():
         # define optimizer
         logits, train_op, cross_entropy_loss = optimize(nn_last_layer, correct_label, learning_rate, num_classes)
 
-        # Train NN using the train_nn function
-        # TODO passing learning rate directly
-        train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, vgg_input, correct_label, vgg_keep_prob, learning_rate, logits)
+        # TODO oh this can be done nicer
+        import sys
+        if len(sys.argv[1:]) > 0:
+            saver = tf.train.Saver()
+            saver.restore(sess, "model")
+
+        else:
+            # Train NN using the train_nn function
+            # TODO passing learning rate directly
+            train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, vgg_input, correct_label, vgg_keep_prob, learning_rate, logits)
+
+        # video
+        print("Now working on video...")
+        video_editor = Video("data/test_videos/hart1.mp4", "data/test_videos/hart1_seg.mp4", sess, logits, vgg_keep_prob, vgg_input, image_shape)
+        video_editor.process_video()
 
         # Save inference data using helper.save_inference_samples
         helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, vgg_keep_prob, vgg_input)
