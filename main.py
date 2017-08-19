@@ -247,8 +247,8 @@ def run():
     image_shape = (160, 576)
     data_dir = './data'
     runs_dir = './runs'
-    epochs = 2 # 2 was 15, nice results with 50, 5
-    batch_size = 10 # 10 was 2
+    epochs = 50 # 2 was 15, nice results with 50, 5
+    batch_size = 5 # 10 was 2
     learning_rate = 0.0005
     # TODO define keep_prob here as well
 
@@ -266,9 +266,6 @@ def run():
         # Path to vgg model
         vgg_path = os.path.join(data_dir, 'vgg')
 
-        # Create function to get batches
-        get_batches_fn = helper.gen_batch_function(os.path.join(data_dir, 'data_road/training'), image_shape)
-
         # TODO OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
         #flipped_images = tf.image.random_flip_left_right(images)
@@ -280,6 +277,13 @@ def run():
         shearing: random with angle between -20° and 20° (uniform)
         stretching: random with stretch factor between 1/1.3 and 1.3 (log-uniform)
         """
+
+        print("Creating augmented images...")
+        augmented_path = os.path.join(data_dir, 'augmented')
+        helper.augment(augmented_path, 'data/data_road/training')
+
+        # Create function to get batches
+        get_batches_fn = helper.gen_batch_function(augmented_path, image_shape)
 
         # load VGG
         vgg_input, vgg_keep_prob, vgg_layer3_out, vgg_layer4_out, vgg_layer7_out = load_vgg(sess, vgg_path)
@@ -305,14 +309,12 @@ def run():
             train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, vgg_input, correct_label, vgg_keep_prob, learning_rate, logits)
 
         # video
-        print("Now working on video...")
-        video_editor = Video("data/test_videos/hart1.mp4", "data/test_videos/hart1_seg.mp4", sess, logits, vgg_keep_prob, vgg_input, image_shape)
-        video_editor.process_video()
+        #print("Now working on video...")
+        #video_editor = Video("data/test_videos/hart1.mp4", "data/test_videos/hart1_seg2.mp4", sess, logits, vgg_keep_prob, vgg_input, image_shape)
+        #video_editor.process_video()
 
         # Save inference data using helper.save_inference_samples
         helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, vgg_keep_prob, vgg_input)
-
-        # TODO OPTIONAL: Apply the trained model to a video
 
 if __name__ == '__main__':
     run()

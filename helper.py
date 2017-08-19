@@ -57,6 +57,46 @@ def maybe_download_pretrained_vgg(data_dir):
         # Remove zip file to save space
         os.remove(os.path.join(vgg_path, vgg_filename))
 
+def augment(output_dir, data_dir):
+    if os.path.exists(output_dir):
+        return
+
+    os.makedirs(os.path.join(output_dir, "image_2"))
+    os.makedirs(os.path.join(output_dir, "gt_image_2"))
+
+    label_paths = {
+        re.sub(r'_(lane|road)_', '_', os.path.basename(path)): path
+        for path in glob(os.path.join(data_dir, 'gt_image_2', '*_road_*.png'))}
+
+    for image_file in glob(os.path.join(data_dir, 'image_2', '*.png')):
+        image = scipy.misc.imread(image_file)
+        gt_image_file = label_paths[os.path.basename(image_file)]
+        label = scipy.misc.imread(gt_image_file)
+
+        # the original image
+        scipy.misc.imsave(os.path.join(output_dir, "image_2", os.path.basename(image_file)), image)
+        scipy.misc.imsave(os.path.join(output_dir, "gt_image_2", os.path.basename(gt_image_file)), label)
+
+        # fliplr
+        scipy.misc.imsave(os.path.join(output_dir, "image_2", "fliplr" + os.path.basename(image_file)), np.fliplr(image))
+        scipy.misc.imsave(os.path.join(output_dir, "gt_image_2", "fliplr" + os.path.basename(gt_image_file)), np.fliplr(label))
+
+        # half the brightness
+        scipy.misc.imsave(os.path.join(output_dir, "image_2", "halfbrightness" + os.path.basename(image_file)), halfbrightness(image))
+        scipy.misc.imsave(os.path.join(output_dir, "gt_image_2", "halfbrightness" + os.path.basename(gt_image_file)), label)
+
+
+def halfbrightness(image):
+    ret = np.copy(image)
+    ret = ret.astype("float64")
+    ret *= 0.5
+    ret = ret.astype("uint8")
+    return ret
+
+def swapaxes(image, a1, a2):
+    ret = np.copy(image)
+    np.swapaxes(ret, a1, a2)
+    return ret
 
 def gen_batch_function(data_folder, image_shape):
     """
@@ -109,7 +149,7 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
     :param image_shape: Tuple - Shape of image
     :return: Output for for each test image
     """
-    for image_file in glob(os.path.join(data_folder, 'image_2', '*.jpg')):
+    for image_file in glob(os.path.join(data_folder, 'image_2', '*.png')):
         image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape)
 
         im_softmax = sess.run(
