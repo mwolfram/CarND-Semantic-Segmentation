@@ -6,7 +6,7 @@ import glob
 import warnings
 import sys
 import os
-from video import Video
+#from video import Video
 from distutils.version import LooseVersion
 import project_tests as tests
 
@@ -79,11 +79,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     Now that you've learned how to use transposed convolution, let's learn about the third technique in FCNs.
     """
 
-    """ weight initializer
-        def custom_init(shape, dtype=tf.float32, partition_info=None, seed=0):
-            return tf.random_normal(shape, dtype=dtype, seed=seed)
-    """
-
     print("vgg3_shape: " + str(vgg_layer3_out.get_shape())) # (?, 56, 56, 256)
     print("vgg4_shape: " + str(vgg_layer4_out.get_shape())) # (?, 28, 28, 512) (?, 14, 14, 512) (?, 7, 7, 512)
     print("vgg7_shape: " + str(vgg_layer7_out.get_shape())) # (?, 1, 1, 4096)
@@ -91,8 +86,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     vgg_layer3_num_outputs = vgg_layer3_out.get_shape()[3]
     vgg_layer4_num_outputs = vgg_layer4_out.get_shape()[3]
     vgg_layer7_num_outputs = vgg_layer7_out.get_shape()[3]
-
-    # TODO weights are never initialized (or I don't know how)
 
     # 1x1 convolution
     conv_1x1_layer = tf.layers.conv2d(vgg_layer7_out,
@@ -189,15 +182,6 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
     print("Start training")
 
-    """
-    tf.summary.scalar('mean', 1.5)
-    merged = tf.summary.merge_all()
-    train_writer = tf.summary.FileWriter('tensorboard/train', sess.graph)
-    summary = sess.run([merged])
-    print(summary)
-    train_writer.add_summary(summary)
-    """
-
     # Create IoU ops
     if logits is not None:
         iou, iou_op, label_pl = get_iou(logits, (160, 576), batch_size)
@@ -247,10 +231,9 @@ def run():
     image_shape = (160, 576)
     data_dir = './data'
     runs_dir = './runs'
-    epochs = 50 # 2 was 15, nice results with 50, 5
-    batch_size = 5 # 10 was 2
+    epochs = 20
+    batch_size = 5
     learning_rate = 0.0005
-    # TODO define keep_prob here as well
 
     # check if Kitti dataset is available
     tests.test_for_kitti_dataset(data_dir)
@@ -266,10 +249,8 @@ def run():
         # Path to vgg model
         vgg_path = os.path.join(data_dir, 'vgg')
 
-        # TODO OPTIONAL: Augment Images for better results
-        #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
-        #flipped_images = tf.image.random_flip_left_right(images)
-        """
+        # Augment Images for better results
+        """ Popular options:
         rotation: random with angle between 0° and 360° (uniform)
         translation: random with shift between -10 and 10 pixels (uniform)
         rescaling: random with scale factor between 1/1.6 and 1.6 (log-uniform)
@@ -297,7 +278,6 @@ def run():
         # define optimizer
         logits, train_op, cross_entropy_loss = optimize(nn_last_layer, correct_label, learning_rate, num_classes)
 
-        # TODO oh this can be done nicer
         import sys
         if len(sys.argv[1:]) > 0:
             saver = tf.train.Saver()
@@ -305,10 +285,15 @@ def run():
 
         else:
             # Train NN using the train_nn function
-            # TODO passing learning rate directly
             train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, vgg_input, correct_label, vgg_keep_prob, learning_rate, logits)
 
         # video
+        """ How to use:
+        1. Uncomment code below and import on top
+        2. Get a test video
+        3. Define source and target paths below
+        4. You'll need to download the moviepy library for video.py to work
+        """
         #print("Now working on video...")
         #video_editor = Video("data/test_videos/hart1.mp4", "data/test_videos/hart1_seg2.mp4", sess, logits, vgg_keep_prob, vgg_input, image_shape)
         #video_editor.process_video()
